@@ -1,12 +1,13 @@
-import { GraphQLObjectType, GraphQLField, GraphQLNamedType, isObjectType, getNullableType } from 'graphql';
-import { parseMarker } from 'graphql-metadata';
+import { GraphQLObjectType, GraphQLSchema, GraphQLField, getNamedType, isObjectType, isScalarType, GraphQLInputType, isEnumType } from 'graphql';
+import { parseMetadata } from 'graphql-metadata';
 import * as pluralize from 'pluralize'
-import { parseRelationshipAnnotation } from '../relationships/relationshipHelpers';
-import { transformForeignKeyName, getPrimaryKey } from '../db';
-import { getBaseType } from '../utils/getBaseType';
+import { getUserTypesFromSchema } from '@graphql-toolkit/common';
+import { SchemaComposer } from 'graphql-compose';
+import { parseRelationshipAnnotation, transformForeignKeyName, getPrimaryKey } from '..';
+import { GraphbackJSON } from '../scalars'
 import { GraphbackOperationType } from './GraphbackOperationType';
 
-//TODO is is esential to document this element
+//TODO it is esential to document this element
 
 /**
  * Graphback CRUD Mapping helpers
@@ -23,46 +24,59 @@ export function upperCaseFirstChar(text: string) {
 /**
  * Get name of the field for query and mutation using our crud model.
  * Method trasform specific CRUD operation into compatible name
- * 
+ *
  * Example:
  * ```
  * type Query {
- *   findAllNotes
- *   findBy()
+ *   getUser()
  * }
  * ```
  * This method is compatible with Graphback CRUD specification
- * 
- * @param typeName 
- * @param action 
+ *
+ * @param typeName
+ * @param action
  */
 export const getFieldName = (typeName: string, action: GraphbackOperationType): string => {
-  let finalName = upperCaseFirstChar(typeName);
-  if (action === GraphbackOperationType.FIND_ALL || action === GraphbackOperationType.FIND) {
-    finalName = pluralize(finalName);
+  const finalName = upperCaseFirstChar(typeName);
+
+  switch (action) {
+    case GraphbackOperationType.FIND_ONE:
+      return `get${finalName}`
+    case GraphbackOperationType.FIND:
+      return `find${pluralize(finalName)}`
+    default:
+      return `${action}${finalName}`
   }
-
-  return `${action}${finalName}`
-}
-
-export function getInputFieldName(field: GraphQLField<any, any>): string {
-  const relationshipAnnotation = parseRelationshipAnnotation(field.description);
-
-  if (!relationshipAnnotation) {
-    return field.name;
-  }
-
-  if (relationshipAnnotation.kind === 'oneToMany') {
-    throw new Error('Not inputtable field!');
-  }
-
-  return relationshipAnnotation.key || transformForeignKeyName(field.name);
 }
 
 /**
- * Provides naming patterns for CRUD subscriptions 
+ * Returns the input type assocatiated with a CRUD operation
+ * @param typeName
+ * @param action
  */
-export const getSubscriptionName = (typeName: string, action: GraphbackOperationType, ): string => {
+export const getInputTypeName = (typeName: string, action: GraphbackOperationType): string => {
+  const finalName = upperCaseFirstChar(typeName);
+  switch (action) {
+    case GraphbackOperationType.FIND:
+      return `${finalName}Filter`
+    case GraphbackOperationType.CREATE:
+      return `Create${finalName}Input`
+    case GraphbackOperationType.UPDATE:
+    case GraphbackOperationType.DELETE:
+      return `Mutate${finalName}Input`
+    case GraphbackOperationType.SUBSCRIPTION_CREATE:
+    case GraphbackOperationType.SUBSCRIPTION_UPDATE:
+    case GraphbackOperationType.SUBSCRIPTION_DELETE:
+      return `${finalName}SubscriptionFilter`
+    default:
+      return ''
+  }
+}
+
+/**
+ * Provides naming patterns for CRUD subscriptions
+ */
+export const getSubscriptionName = (typeName: string, action: GraphbackOperationType): string => {
   const finalName = upperCaseFirstChar(typeName);
   if (action === GraphbackOperationType.CREATE) {
     return `new${finalName}`
@@ -79,17 +93,26 @@ export const getSubscriptionName = (typeName: string, action: GraphbackOperation
   return "";
 }
 
-/**
- * Provides naming pattern for InputType
- * 
- * @param typeName 
- */
-export const getInputTypeName = (typeName: string): string => {
-  return `${typeName}Input`;
+export function isModelType(graphqlType: GraphQLObjectType): boolean {
+  return !!parseMetadata('model', graphqlType.description);
 }
 
-export function isModelType(graphqlType: GraphQLObjectType): boolean {
-  return !!parseMarker('model', graphqlType.description);
+/**
+ * Get only user types annotated by ```@model```
+ *
+ * @param schema
+ */
+export function filterModelTypes(schema: GraphQLSchema): GraphQLObjectType[] {
+  return getUserTypesFromSchema(schema).filter(isModelType)
+}
+
+/**
+ * Get only user types not annotated by ```@model```
+ *
+ * @param schema
+ */
+export function filterNonModelTypes(schema: GraphQLSchema): GraphQLObjectType[] {
+  return getUserTypesFromSchema(schema).filter((t: GraphQLObjectType) => !isModelType(t))
 }
 
 export function getUserModels(modelTypes: GraphQLObjectType[]): GraphQLObjectType[] {
@@ -121,14 +144,44 @@ export function getRelationFieldName(field: any, type: any) {
   return fieldName;
 }
 
+export function getInputFieldName(field: GraphQLField<any, any>): string {
+  const relationshipAnnotation = parseRelationshipAnnotation(field.description);
 
-export function getInputFieldType(field: GraphQLField<any, any>): GraphQLNamedType {
-  let fieldType = getBaseType(field.type);
+  if (!relationshipAnnotation) {
+    return field.name;
+  }
+
+  if (relationshipAnnotation.kind === 'oneToMany') {
+    throw new Error('Not inputtable field!');
+  }
+
+  return relationshipAnnotation.key || transformForeignKeyName(field.name);
+}
+
+export function getInputFieldNamedType(schemaComposer: SchemaComposer<any>, field: GraphQLField<any, any>, operation: GraphbackOperationType): GraphQLInputType {
+  const fieldType = getNamedType(field.type);
 
   if (isObjectType(fieldType) && isModelType(fieldType)) {
     const idField = getPrimaryKey(fieldType);
-    fieldType = getBaseType(idField.type);
+
+    return getNamedType(idField.type) as GraphQLInputType
   }
 
-  return getNullableType(fieldType);
+  if (isScalarType(fieldType) || isEnumType(fieldType)) {
+    return fieldType
+  }
+
+  if (isObjectType(fieldType) && !isModelType(fieldType)) {
+    // TODO: Filtering on JSON fields
+    if (operation === GraphbackOperationType.FIND) {
+      return undefined
+      // return GraphQLJSON
+    }
+
+    const typeName = getInputTypeName(fieldType.name, operation)
+
+    return schemaComposer.getITC(typeName).getType()
+  }
+
+  return undefined;
 }

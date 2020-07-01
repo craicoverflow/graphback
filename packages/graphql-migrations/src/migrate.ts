@@ -63,7 +63,7 @@ export const defaultOptions: MigrateOptions = {
   mapListToJson: true,
   plugins: [],
   debug: false,
-  removeDirectivesFromSchema: true
+  removeDirectivesFromSchema: true,
 }
 
 export async function migrateDB(
@@ -96,13 +96,17 @@ export async function migrateDB(
     finalOptions.dbColumnPrefix,
   )
 
+  let finalSchema: GraphQLSchema;
   if (typeof schema === "string") {
-    schema = buildSchema(schema);
+    finalSchema = buildSchema(schema);
+  } else {
+    finalSchema = schema
   }
 
   //Generate new
-  const newAdb = await generateAbstractDatabase(schema, {
+  const newAdb = await generateAbstractDatabase(finalSchema, {
     scalarMap: finalOptions.scalarMap,
+    mapListToJson: finalOptions.mapListToJson
   })
   if (finalOptions.debug) {
     console.log('BEFORE', JSON.stringify(existingAdb.tables, undefined, 2))
@@ -120,6 +124,7 @@ export async function migrateDB(
   if (finalOptions.debug) {
     console.log('OPERATIONS', ops)
   }
+
   //Write back to DB
   await write(
     ops,

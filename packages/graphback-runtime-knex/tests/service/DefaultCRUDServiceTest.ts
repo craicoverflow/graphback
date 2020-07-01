@@ -1,166 +1,531 @@
 //tslint:disable-next-line: match-default-export-name no-implicit-dependencies
-import _test, { TestInterface } from 'ava';
-import { buildSchema, GraphQLObjectType } from 'graphql';
+import { unlinkSync, existsSync } from 'fs';
+import { buildSchema } from 'graphql';
 import { PubSub } from 'graphql-subscriptions';
 import * as Knex from 'knex';
-import { CRUDService, GraphbackPubSub } from '@graphback/runtime';
-import { KnexDBDataProvider } from '../../src/KnexDBDataProvider';
+import { CRUDService, filterModelTypes } from '@graphback/core';
+import { migrateDB, removeNonSafeOperationsFilter } from 'graphql-migrations';
+import { SQLiteKnexDBDataProvider } from '../../src/SQLiteKnexDBDataProvider';
 
-//tslint:disable: typedef
+const dbPath = `${__dirname}/db.sqlite`;
 
-interface Context {
-  db: Knex;
-  provider: KnexDBDataProvider;
-  todoService: CRUDService
-  userService: CRUDService;
-}
-
-interface Todo {
-  id: number;
-  text: string;
-}
-
-const test = _test as TestInterface<Context>;
-
-const schema = buildSchema(`
-"""
+afterEach(() => {
+  if (existsSync(dbPath)) {
+    unlinkSync(dbPath)
+  }
+})
+const fields = ["id", "title"];
+const setup = async ({ schemaSDL, seedData }: { schemaSDL?: string, seedData?: { [tableName: string]: any | any[] } } = {}) => {
+  if (!schemaSDL) {
+    schemaSDL =
+      `"""
 @model
 """
-type Todos {
+type Todo {
  id: ID!
- text: String 
-}
-
-"""
-@model
-"""
-type User {
-  name: String
-  """
-  @db.primary
-  """
-  username: String
-}
-`);
-
-//tslint:disable-next-line: no-any
-const userModel = schema.getType('User') as GraphQLObjectType
-
-//tslint:disable-next-line: no-any
-const todoModel = schema.getType('Todos') as GraphQLObjectType
-
-//Create a new database before each tests so that
-//all tests can run parallel
-test.beforeEach(async t => {
-  const db = Knex({
-    client: 'sqlite3',
-    connection: {
-      filename: ':memory:',
-    },
-    useNullAsDefault: true,
-  });
-
-  //tslint:disable-next-line: await-promise
-  await db.schema.createTable('todos', table => {
-    table.increments(); //id
-    table.string('text');
-  });
-
-  //tslint:disable-next-line: await-promise
-  await db.schema.createTable('user', table => {
-    table.string('name');
-    table.string('username').primary();
-  });
-
-  //insert a couple of default data
-  //tslint:disable-next-line: await-promise
-  await db('todos').insert({ text: 'my first default todo' });
-  //tslint:disable-next-line: await-promise
-  await db('todos').insert({ text: 'the second todo' });
-  //tslint:disable-next-line: await-promise
-  await db('todos').insert({ text: 'just another todo' });
-
-  //insert a user
-  //tslint:disable-next-line: await-promise
-  await db('user').insert({ name: 'John Doe', username: 'johndoe123' });
-  //tslint:disable-next-line: await-promise
-  await db('user').insert({ name: 'Sam Wicks', username: 'samwicks' });
-
-
-  const todoProvider = new KnexDBDataProvider(todoModel, db);
-  const userProvider = new KnexDBDataProvider(userModel, db);
-
-  const pubSub = new PubSub();
-
-  const publishConfig: GraphbackPubSub = {
-    pubSub,
-    publishCreate: true,
-    publishDelete: true,
-    publishUpdate: true
+ text: String
+}`
   }
 
-  const todoService = new CRUDService(todoModel, todoProvider, publishConfig)
-  const userService = new CRUDService(userModel, userProvider, publishConfig);
+  const dbConfig: Knex.Config = {
+    client: 'sqlite3',
+    connection: {
+      filename: dbPath,
+    },
+    useNullAsDefault: true
+  }
 
-  t.context = { db, provider: todoProvider, todoService, userService };
-});
+  const schema = buildSchema(schemaSDL)
 
-test('create Todo', async t => {
-  const todo: Todo = await t.context.todoService.create({
+  await migrateDB(dbConfig, schema, {
+    operationFilter: removeNonSafeOperationsFilter
+  })
+
+  const db = Knex(dbConfig)
+  if (seedData) {
+    for (const [tableName, data] of Object.entries(seedData)) {
+      await db(tableName).insert(data)
+    }
+  }
+
+  const services: { [name: string]: CRUDService } = {}
+  const models = filterModelTypes(schema)
+  for (const modelType of models) {
+    const modelProvider = new SQLiteKnexDBDataProvider(modelType, db);
+
+    const pubSub = new PubSub();
+    const publishConfig = {
+      subCreate: true,
+      subDelete: true,
+      subUpdate: true
+    }
+
+    services[modelType.name] = new CRUDService(modelType.name, modelProvider, { pubSub, crudOptions: publishConfig })
+  }
+
+  return { schema, services }
+}
+
+test('create Todo', async () => {
+  const { services } = await setup()
+  const todo = await services.Todo.create({
     text: 'create a todo',
-  });
+  }, { graphback: { services: {}, options: { selectedFields: ["id", "text"] } } });
 
-  t.assert(todo.id === 4);
-  t.assert(todo.text === 'create a todo');
+  expect(todo.id).toEqual(1);
+  expect(todo.text).toEqual('create a todo');
 });
 
-test('update Todo', async t => {
-  const todo: Todo = await t.context.todoService.update({
-    id: '1',
+test('update Todo', async () => {
+  const { services } = await setup({ seedData: { todo: { text: 'my first todo' } } })
+  const todo = await services.Todo.update({
+    id: 1,
     text: 'my updated first todo',
+  }, {
+    graphback: {
+      services: {},
+      options: {
+        selectedFields: ["id", "text"]
+      }
+    }
   });
 
-  t.assert(todo.id === 1);
-  t.assert(todo.text === 'my updated first todo');
+  expect(todo.id).toEqual(1);
+  expect(todo.text).toEqual('my updated first todo');
 });
 
-test('delete Todo', async t => {
-  const data = await t.context.todoService.delete({
-    id: '3',
-    text: 'my updated first todo',
+test('delete Todo', async () => {
+  const { services } = await setup({ seedData: { todo: [{ text: 'my first todo' }, { text: 'my second todo' }] } })
+  const data = await services.Todo.delete({
+    id: 2,
+    text: 'my second todo',
+  }, {
+    graphback: {
+      services: {},
+      options: {
+        selectedFields: ["id"]
+      }
+    }
   });
 
-  t.deepEqual(data.id, 3);
+  expect(data.id).toEqual(2);
 });
 
-test('find all Todos', async t => {
-  const todos = await t.context.todoService.findAll();
+test('find Todo by text', async () => {
+  const { services } = await setup({ seedData: { todo: [{ text: 'my first todo' }, { text: 'the second todo' }] } })
 
-  t.assert(todos.length === 3);
+  const todoResults = await services.Todo.findBy({
+    text: { eq: 'the second todo' },
+  }, { graphback: { services: {}, options: { selectedFields: ["id"] } } });
+
+  expect(todoResults.items.length).toEqual(1);
+  expect(todoResults.items[0].id).toEqual(2);
 });
 
-test('find Todo by text', async t => {
-  const todos: Todo[] = await t.context.todoService.findBy({
-    text: 'the second todo',
+test('delete User by custom ID field', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      """
+      @id
+      """
+      email: String
+      name: String
+    }
+    `,
+    seedData: { user: [{ email: 'johndoe@email.com' }, { email: 'test@test.com' }] }
+  })
+
+  const result = await services.User.delete({ email: 'test@test.com' }, {
+    graphback: {
+      services: {},
+      options: {
+        selectedFields: ["email"]
+      }
+    }
   });
 
-  t.assert(todos.length === 1);
-  t.assert(todos[0].id === 2);
+  expect(result.email).toEqual('test@test.com')
 });
 
-test('delete User by custom ID field', async t => {
-  const result = await t.context.userService.delete({
-    username: 'johndoe123'
+test('insertion of User with same custom ID field more than once should fail', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      """
+      @id
+      """
+      email: String
+      name: String
+    }
+    `,
+    seedData: { user: [{ email: 'johndoe@email.com', name: 'John Doe' }] }
   });
 
-  t.assert(result.username === 'johndoe123')
+  try {
+    const result = await services.User.create({ email: 'johndoe@email.com', name: 'John doe' }, { graphback: { services: {}, options: { selectedFields: ["id"] } } });
+    expect(result).toBeFalsy(); // should not reach here because an error should have been thrown by line above
+  } catch (e) {
+    expect(e.code).toBe("SQLITE_CONSTRAINT");
+    expect(e.message).toBe("insert into `user` (`email`, `name`) values ('johndoe@email.com', 'John doe') - SQLITE_CONSTRAINT: UNIQUE constraint failed: user.email");
+  }
 });
 
-test('update User by custom ID field', async t => {
-  const user = await t.context.userService.update({
-    username: 'johndoe123',
-    name: 'Johnny Doe'
-  });
+test('update User by custom ID field', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      """
+      @id
+      """
+      email: String
+      name: String
+    }
+    `,
+    seedData: { user: [{ email: 'johndoe@email.com' }] }
+  })
 
-  t.assert(user.name === 'Johnny Doe')
+  const result = await services.User.update({ email: 'johndoe@email.com', name: 'John Doe' }, { graphback: { services: {}, options: { selectedFields: ["name"] } } })
+
+  expect(result.name).toEqual('John Doe')
 });
+
+test('find users where name starts with "John"', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John Doe' },
+        { name: 'Johnny Doe' },
+        { name: 'James Doe' }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ name: { startsWith: 'John' } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(2)
+})
+
+test('find and count all users', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John Doe' },
+        { name: 'John Paul' },
+        { name: 'James Doe' },
+        { name: 'Johnny Doe' },
+        { name: 'John Luke' }
+      ]
+    }
+  })
+
+  const resultWithCount = await services.User.findBy({ name: { startsWith: 'John' } }, {graphback: {services: {}, options: { selectedFields: ["id"], aggregations: {
+    count: true
+  }}}})
+
+  expect(resultWithCount.count).toEqual(4);
+  expect(resultWithCount.items).toHaveLength(4);
+
+
+  const resultWithoutCount = await services.User.findBy({ name: { startsWith: 'John' } }, {graphback: {services: {}, options: { selectedFields: ["id"], aggregations: {
+    count: false
+  }}}})
+
+
+  expect(resultWithoutCount.count).toBeUndefined();
+  expect(resultWithoutCount.items).toHaveLength(4);
+
+  const resultWithCountAndItems = await services.User.findBy({ name: { startsWith: 'John' } }, {graphback: {services: {}, options: { selectedFields: [], aggregations: {
+    count: true
+  }}}})
+
+
+  expect(resultWithCountAndItems.items.length).toEqual(4);
+  expect(resultWithCountAndItems.count).toEqual(4);
+
+  // count with limit and offset
+
+  let resultWithLimitAndOffset = await services.User.findBy({ name: { startsWith: 'John' } }, {graphback: {services: {}, options: { selectedFields: ["id"], aggregations: {
+    count: true
+  }}}}, {offset: 0, limit: 1})
+
+
+  expect(resultWithLimitAndOffset.items).toHaveLength(1);
+  expect(resultWithLimitAndOffset.count).toEqual(4);
+  expect(resultWithLimitAndOffset.limit).toEqual(1);
+  expect(resultWithLimitAndOffset.offset).toEqual(0);
+})
+
+test('find users where name ends with "Jones"', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John Doe' },
+        { name: 'Johnny Jones' },
+        { name: 'James Doe' }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ name: { endsWith: 'Jones' } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(1)
+})
+
+test('find users where name not eq "John"', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John' },
+        { name: 'John' },
+        { name: 'James' }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ name: { ne: 'John' } }, { graphback: { services: {}, options: { selectedFields: ["name"] } } })
+
+  expect(result.items).toHaveLength(1)
+  expect(result.items[0].name).toBe('James')
+})
+
+test('find users where name in array', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John' },
+        { name: 'Sarah' },
+        { name: 'James' }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ name: { in: ['Sarah', 'John'] } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(2)
+})
+
+test('find users where name contains "John"', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'Mr. John Jones' },
+        { name: 'Ms. Sarah Johnson' },
+        { name: 'Ms. Sarah Jones' },
+        { name: 'Mr. James Johnston' }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ name: { contains: 'John' } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(3)
+})
+
+test('find users where friends == 1', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+      friends: Int
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John', friends: 1 },
+        { name: 'Sarah', friends: 20 },
+        { name: 'Sandra', friends: 30 },
+        { name: 'Enda', friends: 50 },
+        { name: 'Eamon', friends: 0 },
+        { name: 'Isabelle', friends: 100 }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ friends: { eq: 1 } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(1)
+})
+
+test('find users where friends < 1', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+      friends: Int
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John', friends: 1 },
+        { name: 'Sarah', friends: 20 },
+        { name: 'Sandra', friends: 30 },
+        { name: 'Enda', friends: 50 },
+        { name: 'Eamon', friends: 0 },
+        { name: 'Isabelle', friends: 100 }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ friends: { lt: 20 } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(2)
+})
+
+test('find users where friends <= 1', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+      friends: Int
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John', friends: 1 },
+        { name: 'Sarah', friends: 20 },
+        { name: 'Sandra', friends: 30 },
+        { name: 'Enda', friends: 50 },
+        { name: 'Eamon', friends: 0 },
+        { name: 'Isabelle', friends: 100 }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ friends: { le: 1 } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(2)
+})
+
+test('find users where friends > 30', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+      friends: Int
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John', friends: 1 },
+        { name: 'Sarah', friends: 20 },
+        { name: 'Sandra', friends: 30 },
+        { name: 'Enda', friends: 50 },
+        { name: 'Eamon', friends: 0 },
+        { name: 'Isabelle', friends: 100 }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ friends: { gt: 30 } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(2)
+})
+
+test('find users where friends >= 50', async () => {
+  const { services } = await setup({
+    schemaSDL: `
+    """
+    @model
+    """
+    type User {
+      id: ID
+      name: String
+      friends: Int
+    }
+    `,
+    seedData: {
+      user: [
+        { name: 'John', friends: 1 },
+        { name: 'Sarah', friends: 20 },
+        { name: 'Sandra', friends: 30 },
+        { name: 'Enda', friends: 50 },
+        { name: 'Eamon', friends: 0 },
+        { name: 'Isabelle', friends: 100 }
+      ]
+    }
+  })
+
+  const result = await services.User.findBy({ friends: { ge: 50 } }, { graphback: { services: {}, options: { selectedFields: ["id"] } } })
+
+  expect(result.items).toHaveLength(2)
+})

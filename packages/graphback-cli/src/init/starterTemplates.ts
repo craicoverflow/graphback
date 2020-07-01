@@ -1,35 +1,72 @@
-import { createWriteStream } from 'fs'
+import { createWriteStream, mkdirSync, existsSync } from 'fs'
 import chalk from 'chalk';
 import ora from 'ora'
 import * as github from 'parse-github-url'
 import * as request from 'request'
 import * as tar from 'tar'
 import * as tmp from 'tmp'
-import { Template } from './templateMetadata'
+import { Template, TemplateRepository } from './templateMetadata'
 
 /**
  * available templates
  */
 export const allTemplates: Template[] = [
   {
-    name: 'apollo-fullstack-ts',
-    description: 'Apollo GraphQL Server and React Client using TypeScript',
-    repo: {
-      uri: 'https://github.com/aerogear/graphback',
-      // TODO dynamic branching
-      branch: 'templates-release',
-      path: '/templates/ts-apollo-fullstack',
-    }
+    name: 'apollo-fullstack-react-postgres-ts',
+    description: 'Apollo GraphQL Server connecting to Postgres database and React client using TypeScript',
+    repos: [
+      {
+        uri: 'https://github.com/aerogear/graphback',
+        branch: 'templates-0.14.0',
+        path: '/templates/ts-react-apollo-client',
+        mountpath: "client"
+      }, {
+        uri: 'https://github.com/aerogear/graphback',
+        branch: 'templates-0.14.0',
+        path: '/templates/ts-apollo-postgres-backend',
+      }]
   },
   {
-    name: 'apollo-runtime-ts',
-    description: 'Apollo GraphQL Serverless (InMemory) template',
-    repo: {
+    name: 'apollo-fullstack-react-mongo-ts',
+    description: 'Apollo GraphQL Server connecting to Mongo database and React client using TypeScript',
+    repos: [
+      {
+        uri: 'https://github.com/aerogear/graphback',
+        branch: 'templates-0.14.0',
+        path: '/templates/ts-react-apollo-client',
+        mountpath: "client"
+      },{
+        uri: 'https://github.com/aerogear/graphback',
+        branch: 'templates-0.14.0',
+        path: '/templates/ts-apollo-mongodb-backend',
+      }]
+  },
+  {
+    name: 'apollo-mongo-server-ts',
+    description: 'Apollo GraphQL Server connecting to Mongo database using TypeScript',
+    repos: [{
       uri: 'https://github.com/aerogear/graphback',
-      // TODO dynamic branching
-      branch: 'templates-release',
-      path: '/templates/ts-apollo-runtime-backend',
-    }
+      branch: 'templates-0.14.0',
+      path: '/templates/ts-apollo-mongodb-backend',
+    }]
+  },
+  {
+    name: 'apollo-mongo-datasync-server-ts',
+    description: 'Apollo GraphQL Server connecting to Mongo database using TypeScript. Contains Data Synchronization features.',
+    repos: [{
+      uri: 'https://github.com/aerogear/graphback',
+      branch: 'templates-0.14.0',
+      path: '/templates/ts-apollo-mongodb-datasync-backend',
+    }]
+  },
+  {
+    name: 'apollo-postgres-server-ts',
+    description: 'Apollo GraphQL Server connecting to Postgres database using TypeScript',
+    repos: [{
+      uri: 'https://github.com/aerogear/graphback',
+      branch: 'templates-0.14.0',
+      path: '/templates/ts-apollo-postgres-backend',
+    }]
   }
 ]
 
@@ -46,17 +83,17 @@ interface TemplateRepositoryTarInformation {
  * @param template template information provided
  */
 function getTemplateRepositoryTarInformation(
-  template: Template,
+  repo: TemplateRepository,
 ): TemplateRepositoryTarInformation {
-  const meta = github(template.repo.uri)
+  const meta = github(repo.uri)
   const uri = [
     `https://api.github.com/repos`,
     meta.repo,
     'tarball',
-    template.repo.branch,
+    repo.branch,
   ].join('/')
 
-  return { uri, files: template.repo.path }
+  return { uri, files: repo.path }
 }
 
 /**
@@ -118,8 +155,16 @@ async function extractStarterFromRepository(
  * @param name name of project folder
  */
 export async function extractTemplate(template: Template, name: string) {
-  const tarInfo = getTemplateRepositoryTarInformation(template)
-  const file = await downloadRepository(tarInfo)
-  const output = `${process.cwd()}/${name}`
-  await extractStarterFromRepository(file, tarInfo, output)
+  for (const repo of template.repos) {
+    const tarInfo = getTemplateRepositoryTarInformation(repo)
+    const file = await downloadRepository(tarInfo)
+    repo.mountpath = repo.mountpath || "";
+    const output = `${process.cwd()}/${name}/${repo.mountpath}`
+    if(!existsSync(output)){
+      mkdirSync(output)
+    }
+    await extractStarterFromRepository(file, tarInfo, output)
+  }
+
+
 }

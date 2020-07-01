@@ -1,16 +1,12 @@
 import { ApolloServer, PubSub } from "apollo-server-express";
-import {
-  GraphbackDataProvider,
-  GraphbackCRUDService
-} from "@graphback/runtime";
 import { Server } from "http";
-import getPort from "get-port";
-import cors from "cors"
-import express from "express"
-import http from "http"
-import { createRuntime } from './runtime';
-import { GraphbackServerConfig } from "./GraphbackServerConfig";
-import { printSchema } from 'graphql';
+import * as getPort from "get-port";
+import * as cors from "cors";
+import * as express from "express";
+import * as http from "http";
+import { createRuntime, createMongoDBClient } from './runtime';
+import { MongoClient } from 'mongodb';
+import { GraphbackDataProvider, GraphbackCRUDService } from 'graphback';
 
 const ENDPOINT = "/graphql";
 
@@ -23,11 +19,13 @@ export interface ServiceBuilder {
 export class GraphbackServer {
   protected readonly graphqlSchema: string;
   protected readonly httpServer: Server;
+  protected db: MongoClient;
   protected serverPort?: number;
 
-  constructor(httpServer: Server, graphqlSchema: string) {
+  constructor(httpServer: Server, graphqlSchema: string, dbClient: MongoClient) {
     this.httpServer = httpServer;
     this.graphqlSchema = graphqlSchema;
+    this.db = dbClient;
   }
 
   public async start(port?: number): Promise<void> {
@@ -46,8 +44,9 @@ export class GraphbackServer {
       }
     }
 
-    this.httpServer.listen({ port }, () => console.log(`Listening at: ${port}`));
+    this.httpServer.listen({ port });
     this.serverPort = port;
+    console.log(`Listening at: ${this.getHttpUrl()}`);
   }
 
   public async stop(): Promise<void> {
@@ -68,6 +67,10 @@ export class GraphbackServer {
     });
   }
 
+  public getDb(): MongoClient {
+    return this.db;
+  }
+
   public getHttpUrl(): string {
     if (this.serverPort === undefined) {
       throw new Error(
@@ -76,6 +79,10 @@ export class GraphbackServer {
     }
 
     return `http://localhost:${this.serverPort}${ENDPOINT}`;
+  }
+
+  public getHttpPort(): number {
+    return this.serverPort;
   }
 
   public getWsUrl(): string {
@@ -93,17 +100,20 @@ export class GraphbackServer {
   }
 }
 
-export async function buildGraphbackServer(graphbackConfigOpts: GraphbackServerConfig): Promise<GraphbackServer> {
+export async function buildGraphbackServer(modelDir: string, enableDataSync: boolean): Promise<GraphbackServer> {
   const app = express();
 
   app.use(cors());
 
-  // connect to db
-  const runtime = await createRuntime(graphbackConfigOpts);
+  const dbClient = await createMongoDBClient();
+  const db = dbClient.db('test')
+
+  const { typeDefs, resolvers, contextCreator } = await createRuntime(modelDir, db, enableDataSync);
 
   const apolloConfig = {
-    typeDefs: printSchema(runtime.schema),
-    resolvers: runtime.resolvers,
+    typeDefs,
+    resolvers,
+    context: contextCreator,
     playground: true,
     resolverValidationOptions: {
       requireResolversForResolveType: false
@@ -117,5 +127,5 @@ export async function buildGraphbackServer(graphbackConfigOpts: GraphbackServerC
   const httpServer = http.createServer(app);
   apolloServer.installSubscriptionHandlers(httpServer);
 
-  return new GraphbackServer(httpServer, printSchema(runtime.schema));
+  return new GraphbackServer(httpServer, typeDefs, dbClient);
 }

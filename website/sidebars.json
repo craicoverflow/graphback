@@ -1,42 +1,45 @@
 {
   "docs": {
+    "Introduction": [
+      "gettingstarted"
+    ],
     "Getting Started": [
-      "gettingstarted",
       "intro/quickstart",
-      "intro/concepts",
+      "intro/existingproject",
+      "intro/serverless",
+      "intro/graphqlserve",
       "intro/datamodel",
       "intro/config"
     ],
-    "Use Cases": [
-      "intro/usecases",
-      "intro/template",
-      "intro/existingproject",
-      "intro/serverless"
-    ],
     "CRUD": [
       "crud/crudspec",
-      "crud/crudruntime",
-      "crud/relationships",
-      "crud/crudmapping"
+      "crud/crudruntime"
     ],
     "Generator Plugins": [
       "plugins/plugin-intro",
       "plugins/crud-schema",
-      "plugins/crud-resolvers",
       "plugins/crud-client",
       "plugins/customplugin"
     ],
+    "Authentication": [
+      "authentication/authinto",
+      "authentication/keycloak"
+    ],
+    "Subscriptions": [
+      "subscriptions/subintro"
+    ],
     "Database": [
       "db/dbintroduction",
-      "db/dbmigrations",
-      "db/datasources"
-    ],
-    "Migrating to Graphback": [
-      "migrations/intromigrations",
-      "migrations/openapi"
+      "db/datasources",
+      "db/dbmigrations"
     ],
     "Reference": [
-      "commands"
+      "commands",
+      "metadata"
+    ],
+    "Data Synchronization": [
+      "datasync/datasync-intro",
+      "datasync/datasync-soft-delete"
     ],
     "Releases": [
       "releases"

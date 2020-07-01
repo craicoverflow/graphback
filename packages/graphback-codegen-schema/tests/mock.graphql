@@ -1,16 +1,29 @@
-"""@model"""
+directive @test(description: String) on FIELD_DEFINITION | ENUM_VALUE
+
+""" @model """
 type Note {
   id: ID!
-  title: String!
+  title: String! @test(description: "mock directive")
   description: String!
-  ## Relationship
   """
-  @oneToMany field: 'noteComment'
+  @oneToMany(field: 'noteComment', key: 'note_id')
   """
-  comment: [Comment]!
+  comments: [Comment]!
+  """
+  @oneToOne(key: 'test_id')
+  """
+  test: Test
 }
 
-"""@model"""
+"""
+@model
+"""
+type Test {
+  id: ID!
+  name: String
+}
+
+""" @model """
 type Comment {
   id: ID!
   title: String!
@@ -25,3 +38,65 @@ type Query {
 type Mutation {
   likeNote(id: ID!): Note!
 }
+
+"""
+Model added to test schema generation using enum.
+See issue https://github.com/aerogear/graphback/issues/1299
+
+@model(
+  find: false,
+  findOne: false,
+  create: true,
+  update: false,
+  delete: false,
+  subCreate: false,
+  subUpdate: false,
+  subDelete: false
+)
+"""
+type  Issue {
+  id: ID!
+  category: IssueCategory
+  createdAt: DateTime,
+  """
+  Field with custom type added as a fix for https://github.com/aerogear/graphback/issues/1432
+  This shows that a custom type can be added without breaking Graphback schema generation
+  """
+  custom: CustomType
+}
+
+enum IssueCategory {
+ BUG
+ QUESTION
+ FEATURE_REQUEST
+}
+
+type CustomType {
+  issue1432: String
+}
+
+"""
+A model added as part of fixing https://github.com/aerogear/graphback/issues/1452, disable some crud operations to decreate noises.
+@model(
+  find: false,
+  findOne: false,
+  create: true,
+  update: false,
+  delete: false,
+  subCreate: false,
+  subUpdate: false,
+  subDelete: false
+)
+"""
+type Fix {
+  id: ID!
+
+  """
+  Added as part of fixing https://github.com/aerogear/graphback/issues/1452 showing that even if filtering is disabled on a model level,
+  we should have filter type created as it can be used on the relationship level without throwing an error.
+  @oneToMany(field: 'bugFix')
+  """
+  issues: [Issue]
+}
+
+scalar DateTime

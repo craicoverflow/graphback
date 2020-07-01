@@ -1,0 +1,43 @@
+""" @model """
+type Note {
+  id: ID!
+  title: String!
+  description: String
+  """
+  @oneToMany(field: 'note')
+  """
+  comments: [Comment]!
+
+  """
+  @db(type: 'json')
+  """
+  tasks: [Task]!
+}
+
+""" @model """
+type Comment {
+  id: ID!
+  text: String
+  description: String
+  """
+  @oneToOne
+  """
+  metadata: CommentMetadata
+  ratings: [Int!]
+}
+
+"""
+@model
+"""
+type CommentMetadata {
+  id: ID!
+  opened: Boolean
+}
+
+type Task {
+  title: String
+}
+
+type Query {
+  helloWorld: String
+}

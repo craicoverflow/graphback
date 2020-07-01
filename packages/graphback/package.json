@@ -1,6 +1,6 @@
 {
   "name": "graphback",
-  "version": "0.11.0-rc5",
+  "version": "0.14.0-alpha4",
   "description": "Auto generate resolvers on top of the graphql and database of your choice",
   "main": "dist/index.js",
   "types": "types/index.d.ts",
@@ -13,50 +13,37 @@
     "build": "tsc",
     "watch": "tsc -w ",
     "lint": "eslint -t stylish --project \"tsconfig.json\"",
-    "test": "ava",
-    "pretest": "yarn build"
-  },
-  "ava": {
-    "files": [
-      "tests/**/*"
-    ],
-    "compileEnhancements": false,
-    "extensions": [
-      "ts"
-    ],
-    "require": [
-      "ts-node/register"
-    ]
+    "test": "jest"
   },
   "engines": {
     "node": ">=10.15.3"
   },
   "devDependencies": {
-    "@types/node": "12.12.29",
-    "@types/pino": "5.20.0",
-    "ava": "2.4.0",
-    "graphql": "15.0.0-rc.2" ,
+    "@types/jest": "26.0.3",
+    "@types/node": "12.12.47",
+    "@types/pino": "6.3.0",
+    "graphql": "15.2.0",
+    "jest": "26.1.0",
     "rimraf": "3.0.2",
-    "ts-node": "8.6.2",
+    "ts-jest": "26.1.1",
+    "ts-node": "8.10.2",
     "tsutils": "3.17.1",
-    "typescript": "3.8.3"
+    "typescript": "3.9.5"
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@graphback/codegen-client": "0.11.0-rc5",
-    "@graphback/codegen-resolvers": "0.11.0-rc5",
-    "@graphback/codegen-schema": "0.11.0-rc5",
-    "@graphback/core": "0.11.0-rc5",
-    "@graphback/runtime": "0.11.0-rc5",
-    "@graphql-inspector/core": "1.27.0",
+    "@graphback/codegen-client": "0.14.0-alpha4",
+    "@graphback/codegen-schema": "0.14.0-alpha4",
+    "@graphback/core": "0.14.0-alpha4",
+    "@graphql-inspector/core": "2.1.0",
+    "@graphql-tools/merge": "6.0.10",
     "glob": "7.1.6",
     "graphql-subscriptions": "1.1.0",
-    "pg": "7.18.2",
-    "pino": "5.17.0",
-    "sqlite3": "4.1.1",
-    "tslib": "1.11.1"
+    "pg": "8.2.1",
+    "pino": "6.3.2",
+    "tslib": "2.0.0"
   },
   "peerDependencies": {
-    "graphql": "^0.12.0 || ^0.13.0 || ^14.0.0"
+    "graphql": "^14.0.0 || ^15.0.0"
   }
 }

@@ -1,7 +1,6 @@
-import { getDatabaseArguments } from '@graphback/core';
-import { GraphQLObjectType } from 'graphql';
+import { getDatabaseArguments, GraphbackContext, NoDataError } from '@graphback/core';
 import * as Knex from 'knex';
-import { NoDataError } from '@graphback/runtime';
+import { GraphQLObjectType } from 'graphql';
 import { KnexDBDataProvider } from './KnexDBDataProvider';
 
 /**
@@ -11,20 +10,20 @@ import { KnexDBDataProvider } from './KnexDBDataProvider';
  * that works with the rest of the databases.
  */
 //tslint:disable-next-line: no-any
-export class PgKnexDBDataProvider<Type = any, GraphbackContext = any> extends KnexDBDataProvider<Type, GraphbackContext>{
+export class PgKnexDBDataProvider<Type = any> extends KnexDBDataProvider<Type> {
 
-    public constructor(baseType: GraphQLObjectType, db: Knex) {
-        super(baseType, db);
+  public constructor(baseType: GraphQLObjectType, db: Knex) {
+    super(baseType, db);
+  }
+
+  public async create(data: Type, context: GraphbackContext): Promise<Type> {
+    const { data: createData } = getDatabaseArguments(this.tableMap, data);
+
+    //tslint:disable-next-line: await-promise
+    const dbResult = await this.db(this.tableName).insert(createData).returning(this.getSelectedFields(context));
+    if (dbResult && dbResult[0]) {
+      return dbResult[0]
     }
-
-    public async create(data: Type): Promise<Type> {
-        const { data: createData } = getDatabaseArguments(this.tableMap, data);
-
-        //tslint:disable-next-line: await-promise
-        const dbResult = await this.db(this.tableName).insert(createData).returning('*');
-        if (dbResult && dbResult[0]) {
-            return dbResult[0]
-        }
-        throw new NoDataError(`Cannot create ${name}`);
-    }
+    throw new NoDataError(`Cannot create ${this.tableName}`);
+  }
 }

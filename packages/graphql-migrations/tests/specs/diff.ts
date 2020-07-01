@@ -1,6 +1,5 @@
 /*eslint-disable max-lines*/
-import test, { ExecutionContext } from 'ava';
-import { computeDiff } from '../../src'
+import { computeDiff } from '../../src';
 import { AbstractDatabase } from '../../src/abstract/AbstractDatabase'
 import { Table } from '../../src/abstract/Table'
 import { TableColumn } from '../../src/abstract/TableColumn'
@@ -16,7 +15,6 @@ function dbFactory(tables: Table[] = []): AbstractDatabase {
 function tableFactory(options: any): Table {
   return {
     columns: [],
-    primaries: [],
     indexes: [],
     uniques: [],
     annotations: {},
@@ -37,7 +35,7 @@ function columnFactory(options: any): TableColumn {
   }
 }
 
-test('create simple table', async (t: ExecutionContext) => {
+test('create simple table', async () => {
   const result = await computeDiff(dbFactory(), dbFactory([
     tableFactory({
       name: 'User',
@@ -47,36 +45,40 @@ test('create simple table', async (t: ExecutionContext) => {
           name: 'id',
           type: 'increments',
           nullable: false,
+          isPrimaryKey: true,
+          autoIncrementable: true
         }),
         columnFactory({
           name: 'name',
           type: 'string',
           args: [150],
+          isPrimaryKey: false,
+          autoIncrementable: false
         }),
       ]
     }),
   ]))
-  t.assert(result.length === 4)
+  expect(result.length).toEqual(4);
 
-  t.deepEqual(result[0], {
+  expect(result[0]).toEqual({
     type: 'table.create',
     table: 'User',
     priority: 0,
   } as Operation)
-  t.deepEqual(result[1], {
+  expect(result[1]).toEqual({
     type: 'table.comment.set',
     table: 'User',
     comment: 'Some comment',
     priority: 0,
   } as Operation)
-  t.deepEqual(result[2], {
-    type: 'table.primary.set',
+  expect(result[2]).toEqual({
+    type: "table.primary.set",
     table: 'User',
     column: 'id',
-    columnType: 'increments',
+    columnType: "increments",
     priority: 0,
   } as Operation)
-  t.deepEqual(result[3], {
+  expect(result[3]).toEqual({
     type: 'column.create',
     table: 'User',
     column: 'name',
@@ -85,13 +87,15 @@ test('create simple table', async (t: ExecutionContext) => {
     nullable: true,
     defaultValue: undefined,
     comment: undefined,
+    isPrimaryKey: false,
+    autoIncrementable: false,
     priority: 0,
   } as Operation)
 
-  t.snapshot(result);
+  expect(result).toMatchSnapshot();
 })
 
-test('rename table', async (t: ExecutionContext) => {
+test('rename table', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -104,8 +108,8 @@ test('rename table', async (t: ExecutionContext) => {
       },
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'table.rename',
     fromName: 'User',
     toName: 'users',
@@ -113,7 +117,7 @@ test('rename table', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('update table comment', async (t: ExecutionContext) => {
+test('update table comment', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -127,8 +131,8 @@ test('update table comment', async (t: ExecutionContext) => {
   ]), {
     updateComments: true,
   })
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'table.comment.set',
     table: 'User',
     comment: 'New comment',
@@ -136,7 +140,7 @@ test('update table comment', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('set primary key', async (t: ExecutionContext) => {
+test('set primary key', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User'
@@ -148,12 +152,15 @@ test('set primary key', async (t: ExecutionContext) => {
         columnFactory({
           name: 'id',
           type: 'increments',
+          nullable: false,
+          isPrimaryKey: true,
+          autoIncrementable: true
         }),
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'table.primary.set',
     table: 'User',
     column: 'id',
@@ -162,7 +169,7 @@ test('set primary key', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('add column', async (t: ExecutionContext) => {
+test('add column', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -188,8 +195,8 @@ test('add column', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.create',
     table: 'User',
     column: 'name',
@@ -202,7 +209,7 @@ test('add column', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('add and remove column', async (t: ExecutionContext) => {
+test('add and remove column', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -224,14 +231,14 @@ test('add and remove column', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 2)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(2);
+  expect(result[0]).toEqual({
     type: 'column.drop',
     table: 'User',
     column: 'id',
     priority: 0,
   } as Operation)
-  t.deepEqual(result[1], {
+  expect(result[1]).toEqual({
     type: 'column.create',
     table: 'User',
     column: 'email',
@@ -244,7 +251,7 @@ test('add and remove column', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('rename column', async (t: ExecutionContext) => {
+test('rename column', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -269,8 +276,8 @@ test('rename column', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.rename',
     table: 'User',
     fromName: 'id',
@@ -279,7 +286,7 @@ test('rename column', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change column comment', async (t: ExecutionContext) => {
+test('change column comment', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -305,8 +312,8 @@ test('change column comment', async (t: ExecutionContext) => {
   ]), {
     updateComments: true,
   })
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.alter',
     table: 'User',
     column: 'name',
@@ -319,7 +326,7 @@ test('change column comment', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change column type', async (t: ExecutionContext) => {
+test('change column type', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -341,8 +348,8 @@ test('change column type', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.alter',
     table: 'User',
     column: 'age',
@@ -355,7 +362,7 @@ test('change column type', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change column type args', async (t: ExecutionContext) => {
+test('change column type args', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -379,8 +386,8 @@ test('change column type args', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.alter',
     table: 'User',
     column: 'name',
@@ -393,7 +400,7 @@ test('change column type args', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change column nullable', async (t: ExecutionContext) => {
+test('change column nullable', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -417,8 +424,8 @@ test('change column nullable', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.alter',
     table: 'User',
     column: 'name',
@@ -431,7 +438,7 @@ test('change column nullable', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change column default value', async (t: ExecutionContext) => {
+test('change column default value', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -455,8 +462,8 @@ test('change column default value', async (t: ExecutionContext) => {
       ],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'column.alter',
     table: 'User',
     column: 'name',
@@ -469,7 +476,7 @@ test('change column default value', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change anonymous index', async (t: ExecutionContext) => {
+test('change anonymous index', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -501,15 +508,15 @@ test('change anonymous index', async (t: ExecutionContext) => {
       indexes: [{ columns: ['email'] }],
     }),
   ]))
-  t.assert(result.length === 2)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(2);
+  expect(result[0]).toEqual({
     type: 'table.index.drop',
     table: 'User',
     indexName: undefined,
     columns: ['id'],
     priority: 0,
   } as Operation)
-  t.deepEqual(result[1], {
+  expect(result[1]).toEqual({
     type: 'table.index.create',
     table: 'User',
     indexName: undefined,
@@ -519,7 +526,7 @@ test('change anonymous index', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('change named index', async (t: ExecutionContext) => {
+test('change named index', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -551,15 +558,15 @@ test('change named index', async (t: ExecutionContext) => {
       indexes: [{ columns: ['email'], name: 'foo' }],
     }),
   ]))
-  t.assert(result.length === 2)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(2);
+  expect(result[0]).toEqual({
     type: 'table.index.drop',
     table: 'User',
     columns: ['id'],
     indexName: 'foo',
     priority: 0,
   } as Operation)
-  t.deepEqual(result[1], {
+  expect(result[1]).toEqual({
     type: 'table.index.create',
     table: 'User',
     columns: ['email'],
@@ -569,7 +576,7 @@ test('change named index', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('untouched named index', async (t: ExecutionContext) => {
+test('untouched named index', async () => {
   const result = await computeDiff(dbFactory([
     tableFactory({
       name: 'User',
@@ -601,8 +608,8 @@ test('untouched named index', async (t: ExecutionContext) => {
       indexes: [{ columns: ['id'], name: 'foo' }],
     }),
   ]))
-  t.assert(result.length === 1)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(1);
+  expect(result[0]).toEqual({
     type: 'table.index.drop',
     indexName: undefined,
     table: 'User',
@@ -611,7 +618,7 @@ test('untouched named index', async (t: ExecutionContext) => {
   } as Operation)
 })
 
-test('create table & join table', async (t: ExecutionContext) => {
+test('create table & join table', async () => {
   const result = await computeDiff(dbFactory(), dbFactory([
     tableFactory({
       name: 'user',
@@ -620,13 +627,13 @@ test('create table & join table', async (t: ExecutionContext) => {
       name: 'user_groups_join_group_users',
     }),
   ]))
-  t.assert(result.length === 2)
-  t.deepEqual(result[0], {
+  expect(result.length).toEqual(2);
+  expect(result[0]).toEqual({
     type: 'table.create',
     table: 'user',
     priority: 0,
   } as Operation)
-  t.deepEqual(result[1], {
+  expect(result[1]).toEqual({
     type: 'table.create',
     table: 'user_groups_join_group_users',
     priority: 1,

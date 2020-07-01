@@ -1,11 +1,10 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src/**/*", "bin/*", "tests/*"],
+  "include": ["src/**/*.ts"],
   "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
     "outDir": "./dist/",
-    "noImplicitAny": false,
     "declarationDir": "types",
-    "esModuleInterop": true,
     "lib": [
       "esnext.asynciterable",
       "es2015",

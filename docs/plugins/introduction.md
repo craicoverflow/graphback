@@ -22,12 +22,12 @@ Example configuration:
   # Graphback configuration
   graphback:
     ##  Input schema
-    model: ./model
+    model: ./model/**/*.graphql
     ## Global configuration for CRUD generator
     crud:
       create: true
       update: true
-      findAll: true
+      findOne: true
       find: true
       delete: true
       subCreate: true

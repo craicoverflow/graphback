@@ -1,16 +1,22 @@
-""" @model   """
+"""
+@model(delete: false)
+@versioned
+@delta
+"""
 type Note {
   id: ID!
   title: String!
   description: String!
   ## Relationship
   """
-  @oneToMany field: 'noteComment'
+  @oneToMany(field: 'noteComment')
   """
   comment: [Comment]!
 }
 
-""" @model   """
+"""
+@model(create: false)
+"""
 type Comment {
   id: ID!
   title: String!

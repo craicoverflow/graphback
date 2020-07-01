@@ -1,16 +1,5 @@
-
-// DB
-export * from "./data/GraphbackDataProvider"
-export * from "./data/NoDataError"
-
-// Service
-export * from "./service/CRUDService"
-export * from "./service/GraphbackCRUDService"
-export * from "./service/GraphbackPubSub"
-
-
-// Runtime
-export * from "./resolvers/LayeredRuntimeResolverCreator"
-export * from "./resolvers/RuntimeResolversDefinition"
-
-export * from "./GraphbackPubSubModel"
+/**
+ * Package is no longer mantained. 
+ * All related classes were moved to @graphback/core
+ */
+export const stub = {}

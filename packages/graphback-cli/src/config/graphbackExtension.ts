@@ -1,5 +1,5 @@
 import { CodeFileLoader } from '@graphql-toolkit/code-file-loader';
-import { GraphQLExtensionDeclaration, loadConfig } from 'graphql-config';
+import { GraphQLExtensionDeclaration } from 'graphql-config';
 
 
 export const graphbackExtension = 'graphback';
@@ -10,10 +10,10 @@ export const graphbackExtension = 'graphback';
  */
 // eslint-disable-next-line @typescript-eslint/tslint/config
 export const graphbackConfigExtension: GraphQLExtensionDeclaration = api => {
-    //Schema
-    api.loaders.schema.register(new CodeFileLoader());
+  //Schema
+  api.loaders.schema.register(new CodeFileLoader());
 
-    return {
-        name: graphbackExtension
-    };
+  return {
+    name: graphbackExtension
+  };
 };

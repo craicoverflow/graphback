@@ -1,59 +1,50 @@
 
-import { GraphbackRuntime } from 'graphback'
-import { createKnexPGCRUDRuntimeServices } from '@graphback/runtime-knex'
-import { migrateDB } from 'graphql-migrations';
+import { GraphbackAPI, buildGraphbackAPI } from 'graphback'
+import { createMongoDbProvider } from '@graphback/runtime-mongo'
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoClient, Db } from 'mongodb';
+import { loadModel } from './loadModel';
+import { GraphQLSchema } from 'graphql';
+import { DataSyncPlugin, createDataSyncMongoDbProvider, createDataSyncCRUDService } from "@graphback/datasync"
 import { PubSub } from 'graphql-subscriptions';
-import { loadSchema } from './loadSchema';
-import { buildSchema } from 'graphql';
-import Knex from 'knex';
-import { GraphbackServerConfig } from "./GraphbackServerConfig";
-import { loadConfig } from 'graphql-config';
 
-const dbmigrationsConfig = {
-  client: "sqlite3",
-  useNullAsDefault: true,
-  connection: {
-      filename: ":memory:",
-      pool: {
-        min: 1,
-        max: 10,
-        disposeTimeout: 360000 * 1000,
-        idleTimeoutMillis: 360000 * 1000
-      }
+export interface Runtime {
+  schema: GraphQLSchema;
+  resolvers: {
+    Query: {};
+    Mutation: {};
+    Subscription: {};
   }
 };
 
-export const getConfig = async (extension: string): Promise<any> => {
-  const configLoaderOpts = {
-      extensions: [() => ({ name: extension })],
-      throwOnMissing: true,
-      throwOnEmpty: true,
-  }
-  const config = await loadConfig(configLoaderOpts);
+export const createMongoDBClient = async (): Promise<MongoClient> => {
+  const server = new MongoMemoryServer();
+  const client = new MongoClient(await server.getConnectionString(), { useUnifiedTopology: true })
+  await client.connect();
 
-  const conf = await config.getDefault().extension(extension);
-  return conf;
+  return client
 }
 
 /**
  * Method used to create runtime schema
  * It will be part of the integration tests
  */
-export const createRuntime = async (graphbackConfigOpts: GraphbackServerConfig) => {
-  const db = Knex(dbmigrationsConfig);
-  const graphbackConfig = graphbackConfigOpts;
-  const schemaText = loadSchema(graphbackConfig.model);
+export const createRuntime = async (modelDir: string, db: Db, datasync: boolean): Promise<GraphbackAPI> => {
+  const model = await loadModel(modelDir);
 
-  // NOTE: For SQLite db should be always recreated
-  const ops = await migrateDB(dbmigrationsConfig, schemaText);
+  let graphbackAPI;
+  if (datasync) {
+    graphbackAPI = buildGraphbackAPI(model, {
+      serviceCreator: createDataSyncCRUDService({ pubSub: new PubSub() }),
+      dataProviderCreator: createDataSyncMongoDbProvider(db),
+      plugins: [new DataSyncPlugin()]
+    })
 
-  // console.log("Migrated database ", ops);
+  } else {
+    graphbackAPI = buildGraphbackAPI(model, {
+      dataProviderCreator: createMongoDbProvider(db)
+    })
+  }
 
-  const pubSub = new PubSub();
-  const runtimeEngine = new GraphbackRuntime(schemaText, graphbackConfig);
-  const models = runtimeEngine.getDataSourceModels();
-  const services = createKnexPGCRUDRuntimeServices(models, buildSchema(schemaText), db, pubSub);
-  const runtime = runtimeEngine.buildRuntime(services);
-
-  return runtime;
+  return graphbackAPI;
 }

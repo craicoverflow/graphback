@@ -1,59 +1,69 @@
 {
   "name": "graphql-serve",
-  "version": "0.11.0-rc5",
-  "private": true,
+  "version": "0.14.0-alpha4",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "license": "Apache 2.0",
+  "typescript": {
+    "definition": "types/index.d.ts"
+  },
+  "bin": {
+    "gqls": "dist/index.js"
+  },
   "scripts": {
-    "clean": "rm -rf dist/ node_modules/",
+    "clean": "rimraf coverage dist types",
     "build": "tsc",
-    "test": "ava",
+    "watch": "tsc -w",
+    "test": "jest",
     "lint": "eslint --ext js,ts .",
     "print-schema": "ts-node bin/printSchema.ts"
   },
   "devDependencies": {
-    "@types/express": "4.17.3",
-    "@types/node": "12.12.29",
-    "@types/pino": "5.15.5",
-    "@typescript-eslint/eslint-plugin": "2.22.0",
-    "@typescript-eslint/parser": "2.22.0",
-    "ava": "2.4.0",
-    "babel-eslint": "10.0.3",
-    "eslint": "6.8.0",
-    "eslint-config-prettier": "6.10.0",
-    "graphql-request": "1.8.2",
-    "ts-node": "8.6.2",
-    "typescript": "3.8.3"
+    "@types/express": "4.17.6",
+    "@types/jest": "26.0.3",
+    "@types/node": "12.12.47",
+    "@types/pino": "6.3.0",
+    "@types/chalk": "2.2.0",
+    "@typescript-eslint/eslint-plugin": "2.34.0",
+    "@typescript-eslint/parser": "2.34.0",
+    "babel-eslint": "10.1.0",
+    "eslint": "7.3.1",
+    "eslint-config-prettier": "6.11.0",
+    "graphql-request": "2.0.0",
+    "jest": "26.1.0",
+    "rimraf": "3.0.2",
+    "ts-jest": "26.1.1",
+    "ts-node": "8.10.2",
+    "typescript": "3.9.5"
   },
   "dependencies": {
-    "@graphback/codegen-client": "0.11.0-rc5",
-    "@graphback/codegen-schema": "0.11.0-rc5",
-    "@graphback/core": "0.11.0-rc5",
-    "@graphback/runtime": "0.11.0-rc5",
-    "apollo-server-express": "2.11.0",
+    "@graphback/codegen-client": "0.14.0-alpha4",
+    "@graphback/codegen-schema": "0.14.0-alpha4",
+    "@graphback/core": "0.14.0-alpha4",
+    "@graphback/runtime-knex": "0.14.0-alpha4",
+    "@graphback/runtime-mongo": "0.14.0-alpha4",
+    "@graphback/datasync": "0.14.0-alpha4",
+    "@graphql-tools/load": "6.0.10",
+    "@graphql-tools/graphql-file-loader": "6.0.10",
+    "apollo-server-express": "2.15.1",
+    "chalk": "4.1.0",
+    "cors": "2.8.5",
     "express": "4.17.1",
     "get-port": "5.1.1",
-    "graphql": "15.0.0-rc.2" ,
-    "graphql-migrations": "0.10.2",
+    "glob": "7.1.6",
+    "graphback": "0.14.0-alpha4",
+    "graphql": "15.2.0",
+    "graphql-migrations": "0.14.0-alpha4",
+    "graphql-subscriptions": "1.1.0",
     "graphql-tag": "2.10.3",
-    "knex": "0.20.11",
+    "knex": "0.21.1",
     "knex-cleaner": "1.3.0",
-    "sqlite3": "4.1.1"
+    "mongodb": "3.5.9",
+    "mongodb-memory-server": "6.6.1",
+    "sqlite3": "4.2.0",
+    "yargs": "15.3.1"
   },
-  "bin": {
-    "gqlserve": "./dist/bin/serve.js",
-    "printSchema": "./dist/bin/printSchema.js"
-  },
-  "ava": {
-    "files": [
-      "tests/**/*"
-    ],
-    "compileEnhancements": false,
-    "extensions": [
-      "ts"
-    ],
-    "require": [
-      "ts-node/register"
-    ]
+  "peerDependencies": {
+    "graphql": "^14.0.0 || ^15.0.0"
   }
 }

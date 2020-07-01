@@ -1,73 +1,94 @@
 ---
 id: serverless
-title: Serve GraphQL API without code
-sidebar_label: Serverless
+title: Runtime API
+sidebar_label: Runtime API
 ---
 
-Graphback allows you to add GraphQL API without code generation.
+Graphback allows you to add a GraphQL API to your application without generating any code.
 Graphback package can be imported and used directly from your code or serverless handlers. 
-Schema and resolvers can be created when your application code is executed and used to create instance of Apollo or GraphQL-js server
+Schema and resolvers are created in-code and are passed to an Apollo GraphQL or GraphQL.js server instance.
 
 ## Adding runtime layer to your application
 
-To create GraphQL Layer at runtime developers need to initialize `GraphbackRuntime` instance as follows:
+The `buildGraphbackAPI` method creates a schema, resolvers and CRUD services at runtime using your data model and some minimal configuration. The example below shows how you can use Graphback with Apollo and a Postgres database.
 
 ```ts
+import { ApolloServer } from "apollo-server-express"
+import { buildGraphbackAPI } from 'graphback'
+import Knex from 'knex'
+import { createKnexDbProvider } from '@graphback/runtime-knex'
 
-    import { GraphbackRuntime, ModelDefinition, PgKnexDBDataProvider } from 'graphback'
-    import { PubSub } from 'graphql-subscriptions';
+const typeDefs = `
+"""
+@model
+"""
+type User {
+  id: ID
+  name: String
+}
+`
 
-    // Create provider using knex
-    class PostgreSQLRuntime extends GraphbackRuntime {
-      db: Knex<any, any[]>;
+const db = Knex(...)
 
-      constructor(schema: string, config: GraphbackGeneratorConfig, db: Knex) {
-        super(schema, config);
-        this.db = db;
-      }
+// Creates in memory type definitions, resolvers and CRUD services
+const { typeDefs, resolvers, contextCreator } = buildGraphbackAPI(modelDefs, {
+  dataProviderCreator: createKnexDbProvider(db)
+});
 
-      protected createDBProvider(model: ModelDefinition) {
-        return new PgKnexDBDataProvider(model.graphqlType, this.db);
-      }
-    }
-
-    const client = new Knex(...);
-    const graphbackOptions = {...}
-    const schemaText = `type Test ...`
-
-    const pubSub = new PubSub();
-    const serviceOverrides = {}
-    const runtimeEngine = new PostgreSQLRuntime(schemaText, graphbackConfig, client);
-    const runtime = runtimeEngine.buildRuntime(pubSub, {});
-
-  const executableSchema = makeExecutableSchema({
-    typeDefs: printSchema(runtime.schema),
-    resolvers: runtime.resolvers,
-    resolverValidationOptions: {
-      requireResolversForResolveType: false
-    }
-  });
+const apolloServer = new ApolloServer({
+  typeDefs,
+  resolvers,
+  context: contextCreator
+});
 ```
 
-See [`./runtime.ts`](https://github.com/aerogear/graphback/blob/master/templates/ts-apollo-runtime-backend/src/runtime.ts) for a fully functional example.
+If you prefer to use MongoDb:
 
-### GraphbackDataProvider
+```ts
+import { createMongoDbProvider } from '@graphback/runtime-mongo'
 
-Graphback provides following implementations of GraphbackDataProvider
+const { typeDefs, resolvers, contextCreator } = buildGraphbackAPI(modelDefs, {
+  dataProviderCreator: createMongoDbProvider(db)
+});
+```
 
-- KnexDBDataProvider (`@graphback/runtime-knex`)
-- PgKnexDBDataProvider (PostgreSQL version from `@graphback/runtime-knex`)
-- MongoDBDataProvider (`@graphback/runtime-mongodb`)
+By default, Graphback will create a CRUDService with default configuration for each model. You can customise at runtime:
 
-Your resolvers can use different data providers thanks to swapping implementation in resolver context
+```ts
+import { createMongoDbProvider, createCRUDService } from '@graphback/runtime-mongo'
+import { MyCustomLogger } from './util'
 
-## Using different DataSource
+const { typeDefs, resolvers, contextCreator } = buildGraphbackAPI(modelDefs, {
+  serviceCreator: createCRUDService({
+    pubSub: new PubSub(),
+    logger: MyCustomLogger
+  }),
+  dataProviderCreator: createMongoDbProvider(db)
+});
+```
 
-Runtime is created using default CRUDService instance and KnexDBDataProvider db layer to retrieve the data. 
-Developers can override implementations for those when different datasource is used. 
+### buildGraphbackAPI(model, config) ⇒ <code>GraphbackAPI</code>
 
+`buildGraphbackAPI`
 
+| Param | Type | Description |
+| --- | --- | --- |
+| model | <code>GraphQLSchema</code> \| <code>string</code> | Data model as a string or GraphQL schema. Used to generate the Graphback API resolvers, services and database |
+| [config.serviceCreator] | <code>function</code> | Creator class specifying which default CRUD service should be created for each model. |
+| config.dataProviderCreator | <code>function</code> | Creator class specifying which default database provider should be created for each model. |
+| [config.crud] | <code>GraphbackCRUDGeneratorConfig</code> | Global CRUD configuration for the Graphback API. |
+| [config.plugins] | <code>Array.&lt;GraphbackPlugin&gt;</code> | Schema plugins to perform automatic changes to the generated schema |
 
-See [`runtime example application`](https://github.com/aerogear/graphback/tree/master/templates/ts-apollo-runtime-backend)
-for more information.
+## Next steps
 
+1. To change the default application configuration see [Graphback Config](./config.md).
+
+2. See [Defining your Data model](./datamodel.md) for how to design your data model.
+
+3. Graphback provides a number of different data sources which can be configured at application runtime. See [Data Sources](../db/datasources).
+
+4. You can migrate your database to match your schema. See [Database Migrations](../db/migrations.md) for more.*
+
+4. Run your application! 🚀
+
+> **NOTE**: Database migrations only supports PostgreSQL databases.

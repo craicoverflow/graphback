@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-import { DatabaseNameTransform, defaultTableNameTransform, lowerCaseFirstChar, parseRelationshipAnnotation } from '@graphback/core';
+import { DatabaseNameTransform, defaultTableNameTransform, lowerCaseFirstChar, parseRelationshipAnnotation, isModelType, DefaultValueAnnotation } from '@graphback/core';
 import {
   GraphQLField,
   GraphQLObjectType,
@@ -13,21 +13,29 @@ import {
   isScalarType,
   GraphQLEnumValue,
 } from 'graphql'
-import { parseAnnotations, stripAnnotations } from 'graphql-metadata';
+import { stripAnnotations, parseMetadata } from 'graphql-metadata';
 // eslint-disable-next-line import/no-internal-modules
-import { TypeMap } from 'graphql/type/schema'
-import { escapeComment } from '../util/comments'
-import getObjectTypeFromList from '../util/getObjectTypeFromList'
+import { TypeMap } from 'graphql/type/schema';
+import { escapeComment } from '../util/comments';
+import getObjectTypeFromList from '../util/getObjectTypeFromList';
 import getKnexColumnType from '../util/getKnexColumnType';
-import { AbstractDatabase } from './AbstractDatabase'
-import getColumnTypeFromScalar, { TableColumnTypeDescriptor } from './getColumnTypeFromScalar'
-import { OneToManyRelationship } from './RelationshipTypes'
-import { Table } from './Table'
+import { parseAnnotationsCompat } from '../util/parseAnnotationsCompat'
+import { AbstractDatabase } from './AbstractDatabase';
+import getColumnTypeFromScalar, { TableColumnTypeDescriptor } from './getColumnTypeFromScalar';
+import { OneToManyRelationship } from './RelationshipTypes';
+import { Table } from './Table';
 import { ForeignKey, TableColumn } from './TableColumn'
 
-const ROOT_TYPES = ['Query', 'Mutation', 'Subscription']
+const ROOT_TYPES = ['Query', 'Mutation', 'Subscription'];
 
-const INDEX_TYPES = [
+const ID_TYPE = {
+  list: 'primaries',
+  default: (name: string, type: string) => name === 'id' && type === 'ID',
+  max: 1,
+  defaultName: (table: string) => `${table}_pkey`,
+};
+
+const INDEX_UNIQUE_TYPES = [
   {
     annotation: 'index',
     list: 'indexes',
@@ -35,18 +43,17 @@ const INDEX_TYPES = [
     defaultName: (table: string, column: string) => `${table}_${column}_index`,
   },
   {
-    annotation: 'primary',
-    list: 'primaries',
-    default: (name: string, type: string) => name === 'id' && type === 'ID',
-    max: 1,
-    defaultName: (table: string) => `${table}_pkey`,
-  },
-  {
     annotation: 'unique',
     list: 'uniques',
     defaultName: (table: string, column: string) => `${table}_${column}_unique`,
-  },
-]
+  }
+];
+
+const ANNOTATIONS = {
+  id: "id",
+  db: "db",
+  default: "default"
+};
 
 export type ScalarMap = (
   field: GraphQLField<any, any>,
@@ -103,7 +110,7 @@ class AbstractDatabaseBuilder {
     for (const key of Object.keys(this.typeMap)) {
       const type = this.typeMap[key]
       // Tables
-      if (isObjectType(type) && !type.name.startsWith('__') && !ROOT_TYPES.includes(type.name)) {
+      if (isObjectType(type) && !type.name.startsWith('__') && !ROOT_TYPES.includes(type.name) && isModelType(type)) {
         this.buildTable(type)
       }
     }
@@ -124,7 +131,7 @@ class AbstractDatabaseBuilder {
   }
 
   private buildTable(type: GraphQLObjectType) {
-    const annotations: any = parseAnnotations('db', type.description || undefined)
+    const annotations: any = parseAnnotationsCompat(ANNOTATIONS.db, type.description || undefined)
 
     if (annotations.skip) {
       return undefined
@@ -137,7 +144,6 @@ class AbstractDatabaseBuilder {
       columns: [],
       columnMap: new Map<string, TableColumn>(),
       indexes: [],
-      primaries: [],
       uniques: [],
     }
 
@@ -145,10 +151,6 @@ class AbstractDatabaseBuilder {
     this.currentType = type.name
 
     const fields = type.getFields()
-
-    if (!fields.id) {
-      throw new Error(`Required type ${this.currentType}.id not found`);
-    }
 
     for (const key of Object.keys(fields)) {
       const field = fields[key]
@@ -172,11 +174,29 @@ class AbstractDatabaseBuilder {
     this.database.tables.push(table)
     this.database.tableMap.set(type.name, table)
 
+    const primaryKeys = table.columns.filter((column: TableColumn) => column.isPrimaryKey);
+    const primaryKeysSize = primaryKeys.length;
+
+    if (primaryKeysSize >= 2) {
+      const autoIncrementablePrimaryKey = primaryKeys.find((primaryKey: TableColumn) => primaryKey.autoIncrementable);
+
+      if (primaryKeysSize > 2 || (primaryKeysSize === 2 && !autoIncrementablePrimaryKey)) {
+        throw Error(`Multiple primary keys found for table ${table.name}`);
+      }
+
+      // default primary key given with `@id`, privilege this user supplied primary key over the auto incrementable one
+      if (autoIncrementablePrimaryKey) {
+        autoIncrementablePrimaryKey.autoIncrementable = false;
+        autoIncrementablePrimaryKey.isPrimaryKey = false;
+      }
+    }
+
+
     return table
   }
 
   private buildColumn(table: Table, field: GraphQLField<any, any>) {
-    const descriptor = this.getFieldDescriptor(field)
+    const descriptor = this.getFieldDescriptor(field);
     if (!descriptor) { return undefined }
     table.columns.push(descriptor)
     table.columnMap.set(field.name, descriptor)
@@ -187,9 +207,9 @@ class AbstractDatabaseBuilder {
   // eslint-disable-next-line complexity
   private getFieldDescriptor(
     field: GraphQLField<any, any>,
-    fieldType?: GraphQLOutputType,
+    fieldType?: GraphQLOutputType
   ): TableColumn | undefined {
-    const annotations: any = parseAnnotations('db', field.description || undefined)
+    const annotations: any = parseAnnotationsCompat(ANNOTATIONS.db, field.description || undefined)
     const relationshipMarker = parseRelationshipAnnotation(field.description);
 
     if (annotations.skip) {
@@ -205,10 +225,6 @@ class AbstractDatabaseBuilder {
     let type: string
     let args: any[]
     let foreign: ForeignKey | undefined
-
-    if (columnName === 'id' && (isScalarType(fieldType) && fieldType.name !== 'ID')) {
-      throw new Error(`Scalar ID is missing on type ${this.currentType}.${field.name}`);
-    }
 
     // Scalar
     if (isScalarType(fieldType) || annotations.type) {
@@ -233,7 +249,7 @@ class AbstractDatabaseBuilder {
       args = [fieldType.getValues().map((v: GraphQLEnumValue) => v.name)]
 
       // Object
-    } else if (isObjectType(fieldType)) {
+    } else if (isObjectType(fieldType) && isModelType(fieldType)) {
       columnName = relationshipMarker?.key || annotations.name || `${field.name}Id`
       const foreignType = this.typeMap[fieldType.name]
       if (!foreignType) {
@@ -273,7 +289,7 @@ class AbstractDatabaseBuilder {
     } else if (isListType(fieldType) && this.currentTable) {
       let ofType = fieldType.ofType
       ofType = isNonNullType(ofType) ? ofType.ofType : ofType
-      if (isObjectType(ofType)) {
+      if (isObjectType(ofType) && isModelType(ofType)) {
         //Foreign Type
         const onSameType = this.currentType === ofType.name
         const foreignType = this.typeMap[ofType.name]
@@ -288,12 +304,14 @@ class AbstractDatabaseBuilder {
           return undefined
         }
 
+        const manyToMany = parseAnnotationsCompat('manyToMany', field.description)
+
         //Foreign Field
-        const foreignKey = onSameType ? field.name : annotations.manyToMany || this.currentTable.name
+        const foreignKey = onSameType ? field.name : manyToMany.field || this.currentTable.name
         const foreignField = foreignType.getFields()[foreignKey]
         if (!foreignField) { return undefined }
-        //@db.foreign
-        const foreignAnnotations: any = parseAnnotations('db', foreignField.description || undefined)
+        //@db(foreign: true)
+        const foreignAnnotations: any = parseAnnotationsCompat(ANNOTATIONS.db, foreignField.description || undefined)
         const foreignAnnotation = foreignAnnotations.foreign
         if (foreignAnnotation && foreignAnnotation !== field.name) { return undefined }
         //Type
@@ -316,7 +334,6 @@ class AbstractDatabaseBuilder {
             columns: [],
             columnMap: new Map(),
             indexes: [],
-            primaries: [],
             uniques: [],
           }
           this.tableQueue.push(joinTable)
@@ -324,7 +341,7 @@ class AbstractDatabaseBuilder {
         }
         let descriptors = []
         if (onSameType) {
-          const key = annotations.manyToMany || 'id'
+          const key = manyToMany.field || 'id'
           const sameTypeForeignField = foreignType.getFields()[key]
           if (!sameTypeForeignField) {
             console.warn(`Foreign field ${key} on type ${ofType.name} not found on field ${this.currentType}.${field.name}.`)
@@ -363,29 +380,35 @@ class AbstractDatabaseBuilder {
         type = 'json'
         args = []
       } else {
-        console.warn(`Unsupported Scalar/Enum list on field ${this.currentType}.${field.name}. Use @db.type: "json"`)
+        console.warn(`Unsupported Scalar/Enum list on field ${this.currentType}.${field.name}. Use @db(type: "json")`)
 
         return undefined
       }
       //Unsupported
     } else {
+      const stringifiedType = fieldType ? fieldType.toString() : '*unknown*';
       //tslint:disable-next-line max-line-length
-      console.warn(`Field ${this.currentType}.${field.name} of type ${fieldType ? fieldType.toString() : '*unknown*'} not supported. Consider specifying column type with:
+      console.warn(`
+      Field ${this.currentType}.${field.name} of type ${stringifiedType} not supported.
+      Consider specifying the type ${stringifiedType} with:
       """
-      @db.type: "text"
+      @model
+      """
+      as a type comment or specifying column type with:
+      """
+      @db(type: "text")
       """
       as the field comment.`)
 
       return undefined
     }
 
-    //Index
-    for (const indexTypeDef of INDEX_TYPES) {
-      const annotation = annotations[indexTypeDef.annotation]
-      if (this.currentTable && (annotation ||
-        (indexTypeDef.default && isScalarType(fieldType) &&
-          indexTypeDef.default(field.name, fieldType.name) && annotation !== false))
-      ) {
+
+    //Handle Index and Unique
+    for (const indexTypeDef of INDEX_UNIQUE_TYPES) {
+      const annotation = parseMetadata(indexTypeDef.annotation, field.description)
+
+      if (this.currentTable && annotation) {
         let indexName: string | undefined
         let indexType: string | undefined
         if (typeof annotation === 'string') {
@@ -403,11 +426,8 @@ class AbstractDatabaseBuilder {
             type: indexType,
             columns: [],
           } : {
-              name: indexName,
-              columns: [],
-            }
-          if (indexTypeDef.max && list.length === indexTypeDef.max) {
-            list.splice(0, 1)
+            name: indexName,
+            columns: [],
           }
           list.push(index)
         }
@@ -418,21 +438,26 @@ class AbstractDatabaseBuilder {
       }
     }
 
+    const autoIncrementable = isScalarType(fieldType) && ID_TYPE.default(field.name, fieldType.name);
+    const isPrimaryKey = parseMetadata(ANNOTATIONS.id, field) || autoIncrementable;
+    const defaultValue: DefaultValueAnnotation = parseMetadata(ANNOTATIONS.default, field);
+
     return {
       name: columnName,
       comment: escapeComment(stripAnnotations(field.description || undefined)),
       annotations,
       type,
       args: args || [],
-      nullable: !notNull,
+      nullable: !notNull && !isPrimaryKey,
       foreign,
-      // eslint-disable-next-line no-null/no-null
-      defaultValue: annotations.default !== null ? annotations.default : null,
+      defaultValue: defaultValue?.value,
+      autoIncrementable,
+      isPrimaryKey
     }
   }
 
   private createOneToManyRelationship(oneToManyRelationship: OneToManyRelationship) {
-    const annotations: any = parseAnnotations('db', oneToManyRelationship.description || undefined);
+    const annotations: any = parseAnnotationsCompat(ANNOTATIONS.db, oneToManyRelationship.description || undefined);
     const relationshipMarker = parseRelationshipAnnotation(oneToManyRelationship.description);
 
     const field: GraphQLField<any, any> = {
@@ -440,18 +465,20 @@ class AbstractDatabaseBuilder {
       type: oneToManyRelationship.relation,
       description: oneToManyRelationship.description,
       args: [],
-      extensions: []
+      extensions: [],
+      isDeprecated: false,
+      deprecationReason: undefined
     }
 
     const table = this.getRelationTableFromOneToMany(oneToManyRelationship)
 
-    if (!this.hasColumn(table, field)) {
+    if (table && !this.hasColumn(table, field)) {
       this.buildColumn(table, field);
     }
   }
 
   private getRelationTableFromOneToMany(oneToMany: OneToManyRelationship) {
-    const annotations: any = parseAnnotations('db', oneToMany.description || undefined);
+    const annotations: any = parseAnnotationsCompat(ANNOTATIONS.db, oneToMany.description || undefined);
 
     return this.database.tables.find((table: Table) => {
       const tableName = annotations.name || this.getTableName(oneToMany.type.name);
@@ -461,10 +488,15 @@ class AbstractDatabaseBuilder {
   }
 
   private isOneToMany(type: GraphQLObjectType, field: GraphQLField<any, any>) {
-    const annotations: any = parseAnnotations('db', field.description || undefined);
-
     const relationType = getObjectTypeFromList(field);
-    if ((relationType && relationType.name !== type.name) && !annotations.manyToMany) {
+    const dbAnnotations = parseMetadata('db', field.description)
+    const isJsonColumn = dbAnnotations?.type === 'json'
+
+    if (isJsonColumn) {
+      return false
+    }
+
+    if ((relationType && relationType.name !== type.name) && !parseMetadata('manyToMany', field)) {
       return true;
     }
 
@@ -474,7 +506,7 @@ class AbstractDatabaseBuilder {
   private hasColumn(table: Table, field: GraphQLField<any, any>) {
     const columnDescriptor = this.getFieldDescriptor(field);
 
-    const column = table.columns.find((tc: TableColumn) => tc.name === columnDescriptor.name);
+    const column = columnDescriptor && table.columns.find((tc: TableColumn) => tc.name === columnDescriptor.name);
 
     return !!column;
   }

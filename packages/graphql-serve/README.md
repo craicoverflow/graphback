@@ -1,7 +1,7 @@
 ## Graphback
 
 <p align="center">
-  <img width="400" src="https://github.com/aerogear/graphback/raw/master/website/static/img/graphback.png">
+  <img width="400" src="https://raw.githubusercontent.com/aerogear/graphback/master/website/static/img/logo.png">
   <br/>
   Auto generate database structure, <br/>
   GraphQL Resolvers and Queries from GraphQL types 🚀
@@ -43,9 +43,9 @@ yarn add graphql-serve
 ### Usage
 
 
-### gqlserve
+#### gqlserve
 
-The gqlserve command needs at least a single `{putAnythingHere}.graphql` data model file in order to setup a working GraphQL server. Here is an example model file:
+The gqlserve command only needs one or more `*.graphql` data model file(s) in order to setup a working GraphQL server. Here is an example model file:
 
 ```graphql
 """ @model """
@@ -60,60 +60,76 @@ type Note {
 
 Assuming you have created your various `*.graphql` data model files in the `models` directory, to automatically generate resolvers and start a GraphQL server listening on port 8080 do the following:
 
-For npm:
 ```
-$ gqlserve --model=models --port=8080
+$ gqls serve models --port=8080
 ```
 
-For yarn:
+
+If you only need to see the generated GraphQL Schema, use the `print-schema` command:
+
 ```
-$ yarn gqlserve --model=models --port=8080
+$ gqls print-schema .
 ```
+The above command prints schema generated from data model files in the current directory.
 
 This information is also provided with the command itself:
 ```
-$ gqlserve --help
-Usage: gqlserve [options]
+$ gqls -h
+gqls <command>
+
+Commands:
+  gqls print-schema [modelDir]     Generate and print GraphQL schema from data
+                                   model files
+  gqls serve [modelDir] [options]  Generate and start GraphQL server from data
+                                   model files
 
 Options:
-  --version    Show version number                                     [boolean]
-  --model, -m  Specify the models directory                             [string]
-  --port, -p   Specify the port on which to listen on                   [number]
-  -h, --help   Show help                                               [boolean]
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
+```
+For the serve command:
+```
+$ gqls serve -h
+gqls serve [modelDir] [options]
+
+Generate and start GraphQL server from data model files
+
+Positionals:
+  modelDir, model  Directory to search for data models                  [string]
+
+Options:
+  --port, -p     Specify the port on which to listen on                 [number]
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
 
 Examples:
-  gqlserve --model=model  generate schema from models in the model directory
-  gqlserve --port=8000    server listens on port 8000
+  gqls serve . -p 8080  generate schema from data model files in current
+                        directory and start GraphQL server on port 8080
+```
+
+Also for print-schema command:
+```
+$ gqls print-schema -h
+gqls print-schema [modelDir]
+
+Generate and print GraphQL schema from data model files
+
+Positionals:
+  modelDir, model  Directory to search for data models                  [string]
+
+Options:
+  -h, --help     Show help                                             [boolean]
+  -v, --version  Show version number                                   [boolean]
+
+Examples:
+  gqls print-schema modelDir  only display generated schema from data model
+                              files in modelDir directory and quit
 ```
 
 Under to hood we use Graphback to parse the Type Definitions/Data Model and
 generate the GraphQL schema and resolvers. See the
 [Graphback Docs on Data Model Definition](https://graphback.dev/docs/datamodel)
 
-
-### printSchema
-
-The printSchema command prints what the generated GraphQL Schema of the server would look like.
-
-The `--model` argument works the same way here:
-
-```
-$ printSchema --model=models
-```
-Also:
-
-```
-$ printSchema --help
-Usage: printSchema [options]
-
-Options:
-  --version    Show version number                                     [boolean]
-  --model, -m  Specify the models directory                             [string]
-  -h, --help   Show help                                               [boolean]
-
-Examples:
-  printSchema --model=model  generate schema from models in the model directory
-```
 
 ## Extension to GraphQL TestX
 

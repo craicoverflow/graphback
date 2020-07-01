@@ -1,22 +1,19 @@
 ---
 id: dbmigrations
-title: Database Schema Migrations
-sidebar_label:  Database Schema Migrations
+title: Database Migrations
+sidebar_label: Migrations
 ---
-
-## Database Schema Migrations
 
 Graphback uses [graphql-migrations](https://www.npmjs.com/package/graphql-migrations) to automatically create and update tables from a GraphQL schema.
 
-### CLI
+## Compatibility
 
-To create or update your database from the CLI, run:
+- PostgreSQL (create and update database)
+- SQLite (create database only)
 
-```sh
-graphback db
-```
+## Usage
 
-### Usage
+### API
 
 The `migrateDB` method creates and updates your tables and columns to match your GraphQL schema.
 
@@ -46,9 +43,11 @@ migrateDB(dbConfig, schemaText, {
   - `scalarMap`: Custom scalar mapping. Default: `null`.
   - `mapListToJson`: Map scalar lists to JSON column type by default.
   - `debug`: display debugging information and SQL queries.
+  - `removeDirectivesFromSchema`: Strips all directives from schema before processing.
+  - `operationFilter`: Filter out database operations that we don't want, e.g. prevent table deletion.
   - All other options are not currently supported by Graphback.
 
-### Defining your data model
+## Defining your data model
 
 #### Primary key
 
@@ -61,32 +60,140 @@ type Note {
 }
 ```
 
-#### Foreign key
+#### Foreign keys
 
-To set a foreign key, set a field reference to the related type.
+##### OneToOne
 
-```gql
-type Comment {
+```graphql
+"""
+@model
+"""
+type Profile {
   id: ID!
-  note: Note! # this creates a `noteId` column in the `comment` table.
+  """
+  @oneToOne
+  """
+  user: User!
 }
 
-type Note {
+"""
+@model
+"""
+type User {
   id: ID!
-  title: String!
+  name: String
 }
 ```
 
-> NOTE: See [relationships](./relationships) for how to customise foreign key field names.
+This creates a relationship via a `userId` column in the `profile` table. You can customize the key tracking the relationship with the `key` annotation:
 
-#### Default field value
+```graphql
+"""
+@model
+"""
+type Profile {
+  id: ID!
+  """
+  @oneToOne key: 'user_id'
+  """
+  user: User!
+}
 
-```gql
+"""
+@model
+"""
+type User {
+  id: ID!
+  name: String
+}
+```
+
+This maps `Profile.user` to `profile.user_id` in the database.
+
+##### OneToMany
+
+```graphql
+"""
+@model
+"""
 type Note {
   id: ID!
   title: String!
   """
-  @db.default: false
+  @oneToMany field: 'note'
+  """
+  comments: [Comment]
+}
+```
+
+This creates a relationship between `Note.comments` and `Comment.note` and maps to `comment.noteId` in the database. If `Comment.note` does not exist it will be generated for you.
+
+With the `key` annotation you can customise the database column to map to.
+
+```graphql
+"""
+@model
+"""
+type Note {
+  id: ID!
+  title: String!
+  """
+  @oneToMany field: 'note', key: 'note_id'
+  """
+  comments: [Comment]
+}
+```
+
+This maps to `comment.note_id` in the database.
+
+##### ManyToMany
+
+To create a many-to-many relationship, add a model for your join table and use two one-to-many relationship mappings to create the relationship.
+
+```graphql
+""" 
+@model 
+"""
+type Note {
+  id: ID!
+  title: String!
+  description: String
+  """
+  @oneToMany field: 'note'
+  """
+  authors: [NoteAuthor]
+}
+
+"""
+@model
+"""
+type NoteAuthor {
+  id: ID!
+}
+
+"""
+@model
+"""
+type User {
+  id: ID!
+  name: String
+  """
+  @oneToMany field: 'author'
+  """
+  notes: [NoteAuthor]
+}
+```
+
+#### Default field value
+
+You can specify a default value using the `@default` field annotation as shown below.
+
+```graphql
+type Note {
+  id: ID!
+  title: String!
+  """
+  @default(value: false)
   """
   complete: Boolean
 }
@@ -94,23 +201,22 @@ type Note {
 
 #### Custom column type
 
-```gql
+```graphql
 type Note {
   id: ID!
   """
-  @db.type: 'string'
-  @db.length: 100
+  @db(type: 'string', length: 100)
   """
   title: String!
 }
 ```
 
-#### Changing column names in graphback
+#### Changing column names in Graphback
 
 When working with database migration library it is possible to change individual database columns.
 Using custom column will require manual mapping in resolver or database layer. 
 
-```gql
+```graphql
 type Note {
   id: ID!
   """
@@ -129,12 +235,5 @@ When using custom name in database we need to map it directly inside resolver or
     }
 ```
 
-> NOTE: database migration logic require objects to have `id: ID!` field defined. 
-Renaming `id` field to anything else will break Graphback data resolution logic
-
-### Compatibility
-
-The following database providers support full database schema migrations.
-
-- PostgreSQL
-- SQLLite
+> NOTE: To be able to fully use Graphback, it is recommended that your data models objects to have `id: ID!` field 
+or a primary key field specified with the `@id` annotation.
