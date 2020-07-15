@@ -6,7 +6,7 @@ import { parseMetadata } from "graphql-metadata";
 import { SchemaComposer, NamedTypeComposer } from 'graphql-compose';
 import { IResolvers, IObjectTypeResolver } from '@graphql-tools/utils';
 import { GraphQLNonNull, GraphQLObjectType, GraphQLSchema, GraphQLInt, GraphQLFloat, isScalarType, isSpecifiedScalarType, GraphQLResolveInfo, isObjectType, GraphQLInputObjectType, GraphQLScalarType } from 'graphql';
-import { getFieldName, metadataMap, printSchemaWithDirectives, getSubscriptionName, GraphbackCoreMetadata, GraphbackOperationType, GraphbackPlugin, ModelDefinition, addRelationshipFields, extendRelationshipFields, extendOneToManyFieldArguments, getInputTypeName, FieldRelationshipMetadata, GraphbackContext, getSelectedFieldsFromResolverInfo, isModelType, getPrimaryKey, graphbackScalarsTypes, getResolverInfoFieldsList, GraphbackTimestamp, FILTER_SUPPORTED_SCALARS, FindByArgs } from '@graphback/core';
+import { getFieldName, metadataMap, printSchemaWithDirectives, getSubscriptionName, GraphbackCoreMetadata, GraphbackOperationType, GraphbackPlugin, ModelDefinition, addRelationshipFields, extendRelationshipFields, extendOneToManyFieldArguments, getInputTypeName, FieldRelationshipMetadata, GraphbackContext, getSelectedFieldsFromResolverInfo, isModelType, getPrimaryKey, graphbackScalarsTypes, GraphbackTimestamp, FILTER_SUPPORTED_SCALARS, FindByArgs, GraphbackPluginError } from '@graphback/core';
 import { gqlSchemaFormatter, jsSchemaFormatter, tsSchemaFormatter } from './writer/schemaFormatters';
 import { buildFilterInputType, createModelListResultType, StringScalarInputType, BooleanScalarInputType, SortDirectionEnum, buildCreateMutationInputType, buildFindOneFieldMap, buildMutationInputType, OrderByInputType, buildSubscriptionFilterType, IDScalarInputType, PageRequest, createInputTypeForScalar, createVersionedFields, createVersionedInputFields, addCreateObjectInputType, addUpdateObjectInputType, getInputName } from './definitions/schemaDefinitions';
 
@@ -361,11 +361,11 @@ export class SchemaCRUDPlugin extends GraphbackPlugin {
         const errorMessage = (field: string) => `Type "${model.graphqlType.name}" annotated with @versioned, cannot contain custom "${field}" field since it is generated automatically. Either remove the @versioned annotation, change the type of the field to "${GraphbackTimestamp.name}" or remove the field.`
 
         if (createAtField && createAtField.type !== GraphbackTimestamp.name) {
-          throw new Error(errorMessage(metadataMap.fieldNames.createdAt));
+          throw new GraphbackPluginError(errorMessage(metadataMap.fieldNames.createdAt));
         }
 
         if (updateField && updateField.type !== GraphbackTimestamp.name) {
-          throw new Error(errorMessage(metadataMap.fieldNames.updatedAt));
+          throw new GraphbackPluginError(errorMessage(metadataMap.fieldNames.updatedAt));
         }
 
         if (!timestampInputType) {

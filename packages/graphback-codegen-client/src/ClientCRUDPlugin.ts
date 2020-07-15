@@ -1,5 +1,5 @@
 import { parse } from 'path';
-import { GraphbackCoreMetadata, GraphbackPlugin } from '@graphback/core'
+import { GraphbackCoreMetadata, GraphbackPlugin, GraphbackPluginError } from '@graphback/core'
 import { writeDocumentsToFilesystem } from './helpers/writeDocuments';
 import { createClientDocumentsGQL, createClientDocumentsTS } from './templates'
 import { ClientTemplates } from './templates/ClientTemplates'
@@ -43,7 +43,7 @@ export class ClientCRUDPlugin extends GraphbackPlugin {
     super()
     this.pluginConfig = pluginConfig;
     if (!pluginConfig.outputFile) {
-      throw new Error("client plugin requires outputFile parameter")
+      throw new GraphbackPluginError("client plugin requires outputFile parameter")
     }
   }
 
@@ -71,7 +71,7 @@ export class ClientCRUDPlugin extends GraphbackPlugin {
     const supportedFileExtensions = ['.ts', '.graphql'];
 
     if (!supportedFileExtensions.includes(documentExtension)) {
-      throw new Error(`ClientCRUD plugin outputFile requires a file extension of either: ${supportedFileExtensions.join(', ')}`)
+      throw new GraphbackPluginError(`ClientCRUD plugin outputFile requires a file extension of either: ${supportedFileExtensions.join(', ')}`)
     }
 
     if (documentExtension === '.ts') {
@@ -80,7 +80,7 @@ export class ClientCRUDPlugin extends GraphbackPlugin {
     else if (documentExtension === '.graphql') {
       documents = createClientDocumentsGQL(models);
     } else {
-      throw new Error("Invalid output format for client plugin");
+      throw new GraphbackPluginError("Invalid output format for client plugin");
     }
 
     if (this.pluginConfig.fragmentOnly) {

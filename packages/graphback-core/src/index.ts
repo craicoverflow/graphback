@@ -8,6 +8,7 @@ export * from './plugin/GraphbackCRUDGeneratorConfig';
 export * from './plugin/ModelDefinition'
 export * from './plugin/getSelectedFieldsFromResolverInfo';
 export * from './plugin/GraphbackCoreMetadata'
+export * from './plugin/GraphbackPluginError'
 
 export * from './relationships/RelationshipMetadataBuilder';
 export * from './relationships/relationshipHelpers';
