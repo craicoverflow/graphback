@@ -13,9 +13,9 @@ import { buildGraphbackAPI, GraphbackAPI } from "graphback";
 import { DocumentNode } from 'graphql';
 import { MongoClient, Db } from 'mongodb';
 import { PubSub } from "graphql-subscriptions";
-import { createDataSyncMongoDbProvider, createDataSyncCRUDService, DataSyncPlugin, DataSyncFieldNames } from "../../packages/graphback-datasync";
-import { SchemaCRUDPlugin } from '../../packages/graphback-codegen-schema';
-import { ClientCRUDPlugin } from '../../packages/graphback-codegen-client';
+import { createDataSyncMongoDbProvider, createDataSyncCRUDService, DataSyncPlugin, DataSyncFieldNames } from "@graphback/datasync";
+import { SchemaCRUDPlugin } from '@graphback/codegen-schema';
+import { ClientCRUDPlugin } from '@graphback/codegen-client';
 import { MONGO_DB_URL } from '../__util__/mongoUtil';
 
 /** global config */
